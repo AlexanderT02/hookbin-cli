@@ -1,0 +1,26 @@
+# Go build and test artifacts
+/hookbin
+/hookbin.exe
+/dist/
+/build/
+/coverage/
+*.test
+*.out
+*.prof
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs and temporary files
+*.log
+*.tmp
