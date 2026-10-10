@@ -63,7 +63,7 @@ release_url="https://github.com/${repo}/releases/download/${tag}"
 download "${release_url}/${archive}" "$tmp_dir/$archive"
 download "${release_url}/SHA256SUMS" "$tmp_dir/SHA256SUMS"
 
-expected="$(awk -v file="$archive" '$2 == file { print $1 }' "$tmp_dir/SHA256SUMS")"
+expected="$(awk -v file="$archive" '{ name = $2; sub(/^\.\//, "", name); sub(/^\*/, "", name); if (name == file) print $1 }' "$tmp_dir/SHA256SUMS")"
 if [ -z "$expected" ]; then
   echo "No checksum found for ${archive}." >&2
   exit 1
