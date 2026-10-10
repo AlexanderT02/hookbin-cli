@@ -4,11 +4,81 @@ set -eu
 repo="AlexanderT02/hookbin-cli"
 install_dir="${HOOKBIN_INSTALL_DIR:-${HOME}/.local/bin}"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hookbin-install.XXXXXX")"
+step_pid=""
+step_number=0
+interactive=false
+color=false
+[ -t 1 ] && interactive=true
+if [ "$interactive" = true ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]; then
+  color=true
+fi
 
 cleanup() {
+  if [ -n "$step_pid" ]; then
+    kill "$step_pid" 2>/dev/null || true
+    wait "$step_pid" 2>/dev/null || true
+  fi
   rm -rf "$tmp_dir"
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if [ "$color" = true ]; then printf '\033[38;2;127;209;160m'; fi
+printf '\n  ┌──────────────────────────────────┐\n'
+printf '  │  hookbin  /  CLI installer       │\n'
+printf '  └──────────────────────────────────┘\n'
+if [ "$color" = true ]; then printf '\033[0m'; fi
+printf '\n'
+
+done_step() {
+  if [ "$color" = true ]; then printf '  \033[38;2;127;209;160m✓\033[0m  %s\n' "$1"
+  else printf '  ✓  %s\n' "$1"; fi
+}
+
+run_step() {
+  label="$1"
+  shift
+  if [ "$interactive" != true ]; then
+    printf '  →  %s...\n' "$label"
+    "$@"
+    done_step "$label"
+    return
+  fi
+
+  step_number=$((step_number + 1))
+  result_file="$tmp_dir/step-${step_number}.result"
+  error_file="$tmp_dir/step-${step_number}.error"
+  (
+    outcome=failed
+    trap 'printf "%s" "$outcome" >"$result_file"' EXIT
+    if "$@" 2>"$error_file"; then outcome=ok; fi
+  ) &
+  step_pid=$!
+  frame=0
+  while [ ! -f "$result_file" ]; do
+    case $((frame % 4)) in
+      0) glyph='⠋' ;;
+      1) glyph='⠙' ;;
+      2) glyph='⠹' ;;
+      3) glyph='⠸' ;;
+    esac
+    if [ "$color" = true ]; then printf '\r\033[2K  \033[38;2;127;209;160m%s\033[0m  %s...' "$glyph" "$label"
+    else printf '\r  %s  %s...' "$glyph" "$label"; fi
+    frame=$((frame + 1))
+    sleep 0.12
+  done
+  wait "$step_pid"
+  step_pid=""
+  printf '\r\033[2K'
+  if [ "$(cat "$result_file")" != ok ]; then
+    printf '  ✗  %s failed.\n' "$label" >&2
+    cat "$error_file" >&2
+    return 1
+  fi
+  done_step "$label"
+}
 
 download() {
   url="$1"
@@ -20,7 +90,7 @@ download() {
     wget --quiet "$url" --output-document="$destination"
   else
     echo "hookbin installer requires curl or wget." >&2
-    exit 1
+    return 1
   fi
 }
 
@@ -50,7 +120,7 @@ case "$(uname -m)" in
     ;;
 esac
 
-download "https://api.github.com/repos/${repo}/releases/latest" "$tmp_dir/release.json"
+run_step "Finding latest release" download "https://api.github.com/repos/${repo}/releases/latest" "$tmp_dir/release.json"
 tag="$(sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' "$tmp_dir/release.json" | head -n 1)"
 if [ -z "$tag" ]; then
   echo "Could not find a published hookbin release on GitHub." >&2
@@ -60,8 +130,8 @@ fi
 version="${tag#v}"
 archive="hookbin_${version}_${os}_${arch}.${archive_extension}"
 release_url="https://github.com/${repo}/releases/download/${tag}"
-download "${release_url}/${archive}" "$tmp_dir/$archive"
-download "${release_url}/SHA256SUMS" "$tmp_dir/SHA256SUMS"
+run_step "Downloading hookbin ${tag}" download "${release_url}/${archive}" "$tmp_dir/$archive"
+run_step "Downloading checksums" download "${release_url}/SHA256SUMS" "$tmp_dir/SHA256SUMS"
 
 expected="$(awk -v file="$archive" '{ name = $2; sub(/^\.\//, "", name); sub(/^\*/, "", name); if (name == file) print $1 }' "$tmp_dir/SHA256SUMS")"
 if [ -z "$expected" ]; then
@@ -82,16 +152,17 @@ if [ "$actual" != "$expected" ]; then
   echo "Checksum verification failed for ${archive}." >&2
   exit 1
 fi
+done_step "SHA-256 checksum verified"
 
 if [ "$archive_extension" = "zip" ]; then
   if ! command -v unzip >/dev/null 2>&1; then
     echo "Git Bash needs unzip to install the Windows release archive." >&2
     exit 1
   fi
-  unzip -q "$tmp_dir/$archive" -d "$tmp_dir/extracted"
+  run_step "Unpacking CLI" unzip -q "$tmp_dir/$archive" -d "$tmp_dir/extracted"
   extracted_dir="$tmp_dir/extracted"
 else
-  tar -xzf "$tmp_dir/$archive" -C "$tmp_dir"
+  run_step "Unpacking CLI" tar -xzf "$tmp_dir/$archive" -C "$tmp_dir"
   extracted_dir="$tmp_dir"
 fi
 
@@ -99,12 +170,13 @@ mkdir -p "$install_dir"
 cp "$extracted_dir/$binary" "$install_dir/$binary"
 chmod 755 "$install_dir/$binary"
 
-echo "Installed hookbin ${tag} to ${install_dir}/${binary}"
+done_step "Installed hookbin ${tag}"
+printf '\n  %s\n\n' "${install_dir}/${binary}"
 if [ "$os" = "windows" ]; then
-  echo "The Inspector's Windows command runs this binary from PowerShell."
+  printf '  The Inspector Windows command runs this binary from PowerShell.\n'
   exit 0
 fi
 case ":${PATH}:" in
   *":${install_dir}:"*) ;;
-  *) echo "Add ${install_dir} to your PATH to run 'hookbin' from any directory." ;;
+  *) printf '  Add %s to PATH to run hookbin from any directory.\n' "$install_dir" ;;
 esac
