@@ -17,7 +17,7 @@ import (
 	"github.com/hookbin/hookbin-cli/internal/protocol"
 )
 
-const Version = "0.1.0"
+var Version = "dev"
 
 type permanentError string
 

@@ -29,3 +29,12 @@ go run ./cmd/hookbin listen <slug> --secret <secret> --forward-to http://localho
 ```
 
 The CLI reconnects after transient connection failures and exits when the bin expires. See [PROTOCOL.md](PROTOCOL.md) for the agent protocol and fixtures.
+
+## Releases
+
+Push a version tag such as `v0.1.0` to run the release workflow. It tests the source, builds archives for Linux, macOS, and Windows, and publishes the archives with SHA-256 checksums as a GitHub Release.
+
+```sh
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```

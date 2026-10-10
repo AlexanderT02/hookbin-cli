@@ -1,0 +1,95 @@
+name: Release CLI
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test release source
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+  release:
+    name: Build and publish release assets
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+
+          build_archive() {
+            local goos="$1"
+            local goarch="$2"
+            local extension="$3"
+            local workdir
+            local binary="hookbin"
+            local archive="${GITHUB_WORKSPACE}/dist/hookbin_${version}_${goos}_${goarch}"
+
+            workdir="$(mktemp -d)"
+            if [[ "$goos" == "windows" ]]; then
+              binary="hookbin.exe"
+            fi
+
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build \
+              -trimpath \
+              -ldflags "-s -w -X github.com/hookbin/hookbin-cli/internal/agent.Version=${version}" \
+              -o "${workdir}/${binary}" \
+              ./cmd/hookbin
+            cp LICENSE "${workdir}/LICENSE"
+
+            if [[ "$extension" == "zip" ]]; then
+              (cd "$workdir" && zip -q "${archive}.zip" "$binary" LICENSE)
+            else
+              tar -C "$workdir" -czf "${archive}.tar.gz" "$binary" LICENSE
+            fi
+
+            rm -rf "$workdir"
+          }
+
+          build_archive linux amd64 tar.gz
+          build_archive linux arm64 tar.gz
+          build_archive darwin amd64 tar.gz
+          build_archive darwin arm64 tar.gz
+          build_archive windows amd64 zip
+          build_archive windows arm64 zip
+
+          cd dist
+          sha256sum ./*.tar.gz ./*.zip > SHA256SUMS
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
