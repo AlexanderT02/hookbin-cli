@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hookbin/hookbin-cli/internal/agent"
+	"github.com/hookbin/hookbin-cli/internal/updater"
 	"github.com/spf13/cobra"
 )
 
@@ -17,6 +19,32 @@ func NewCommand() *cobra.Command {
 	root.AddCommand(&cobra.Command{Use: "version", Run: func(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(cmd.OutOrStdout(), agent.Version)
 	}})
+	var checkOnly bool
+	update := &cobra.Command{
+		Use: "update", Short: "Install the latest CLI release", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			release, available, err := updater.Check(cmd.Context(), agent.Version)
+			if err != nil {
+				return err
+			}
+			if !available {
+				fmt.Fprintf(cmd.OutOrStdout(), "hookbin %s is up to date\n", agent.Version)
+				return nil
+			}
+			if checkOnly {
+				fmt.Fprintf(cmd.OutOrStdout(), "hookbin %s is available; run hookbin update to install it\n", release.Version())
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Updating hookbin %s → %s...\n", agent.Version, release.Version())
+			if err := updater.Install(cmd.Context(), release); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "hookbin %s installed; restart the CLI to use it\n", release.Version())
+			return nil
+		},
+	}
+	update.Flags().BoolVar(&checkOnly, "check", false, "Check for a new release without installing it")
+	root.AddCommand(update)
 	var secret, target, server string
 	var timeout time.Duration
 	var insecure bool
@@ -34,6 +62,16 @@ func NewCommand() *cobra.Command {
 			}
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+			if agent.Version != "dev" {
+				go func() {
+					checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+					defer cancel()
+					release, available, err := updater.Check(checkCtx, agent.Version)
+					if err == nil && available && checkCtx.Err() == nil {
+						agent.NotifyUpdate(release.Version())
+					}
+				}()
+			}
 			return agent.Listen(ctx, server, args[0], secret, target, timeout, insecure)
 		},
 	}

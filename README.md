@@ -30,6 +30,17 @@ go run ./cmd/hookbin listen <slug> --secret <secret> --forward-to http://localho
 
 The CLI reconnects after transient connection failures and exits when the bin expires. See [PROTOCOL.md](PROTOCOL.md) for the agent protocol and fixtures.
 
+## Updating
+
+Released builds check GitHub for a newer stable version when `hookbin listen` starts. If one is available, the CLI shows a notice while continuing to forward webhooks. Development builds do not check.
+
+```sh
+hookbin update --check  # check without installing
+hookbin update          # download, verify, and install the latest release
+```
+
+The updater verifies the release archive against its published SHA-256 checksum before replacing the executable. Restart a running CLI after updating. The command needs write access to the directory containing the current executable.
+
 ## Releases
 
 Push a version tag such as `v0.1.0` to run the release workflow. It tests the source, builds archives for Linux, macOS, and Windows, and publishes the archives with SHA-256 checksums as a GitHub Release.

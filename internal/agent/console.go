@@ -23,15 +23,16 @@ var (
 		4: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#8c550f", Dark: "#f5b15c"}).Background(lipgloss.AdaptiveColor{Light: "#fff1db", Dark: "#40301f"}).Bold(true).Padding(0, 1),
 		5: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#a43731", Dark: "#f08a7e"}).Background(lipgloss.AdaptiveColor{Light: "#fde9e6", Dark: "#392e2c"}).Bold(true).Padding(0, 1),
 	}
-	replayStyle   = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#5f6b64", Dark: "#b5b9b7"}).Background(lipgloss.AdaptiveColor{Light: "#edf0ed", Dark: "#303431"}).Padding(0, 1)
-	spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	replayStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#5f6b64", Dark: "#b5b9b7"}).Background(lipgloss.AdaptiveColor{Light: "#edf0ed", Dark: "#303431"}).Padding(0, 1)
 )
 
 type terminalUI struct {
-	mu      sync.Mutex
-	color   bool
-	waiting chan struct{}
-	frame   int
+	mu           sync.Mutex
+	color        bool
+	waiting      chan struct{}
+	frame        int
+	waitingSince time.Time
+	requests     int
 }
 
 var screen = newTerminalUI()
@@ -72,7 +73,14 @@ func (ui *terminalUI) badge(text string, class int) string {
 }
 
 func (ui *terminalUI) spinnerLine() string {
-	return "  " + ui.render(green, spinnerFrames[ui.frame%len(spinnerFrames)]) + "  " + ui.render(muted, "waiting for webhooks") + ui.render(muted, "  ·  Ctrl+C to stop")
+	track := []rune("────────")
+	track[ui.frame%len(track)] = '●'
+	idle := time.Since(ui.waitingSince).Truncate(time.Second)
+	label := "  listening for webhooks"
+	if ui.requests > 0 {
+		label = fmt.Sprintf("  listening for webhooks  ·  %d received", ui.requests)
+	}
+	return "  " + ui.render(green, string(track)) + ui.render(white, label) + ui.render(muted, "  ·  idle "+idle.String()+"  ·  Ctrl+C to stop")
 }
 
 func (ui *terminalUI) clearWaiting() {
@@ -94,13 +102,15 @@ func (ui *terminalUI) printBlock(block string) {
 func (ui *terminalUI) startWaiting() {
 	ui.mu.Lock()
 	if !ui.color {
-		fmt.Println("  waiting for webhooks")
+		fmt.Println("  listening for webhooks  ·  Ctrl+C to stop")
 		ui.mu.Unlock()
 		return
 	}
 	stop := make(chan struct{})
 	ui.waiting = stop
 	ui.frame = 0
+	ui.waitingSince = time.Now()
+	ui.requests = 0
 	fmt.Print(ui.spinnerLine())
 	ui.mu.Unlock()
 	go func() {
@@ -148,6 +158,10 @@ func (ui *terminalUI) targetChanged(target string) {
 }
 
 func (ui *terminalUI) request(method, path string, replay bool, status int, elapsed time.Duration, requestError error) {
+	ui.mu.Lock()
+	ui.requests++
+	ui.waitingSince = time.Now()
+	ui.mu.Unlock()
 	replayCell := strings.Repeat(" ", 8)
 	if replay {
 		replayCell = ui.render(replayStyle, "replay")
@@ -171,6 +185,10 @@ func (ui *terminalUI) request(method, path string, replay bool, status int, elap
 
 func (ui *terminalUI) warning(message string) {
 	ui.printBlock(ui.render(amber, "!") + " " + message)
+}
+
+func NotifyUpdate(version string) {
+	screen.warning("hookbin " + version + " is available  ·  run hookbin update")
 }
 
 func durationLabel(duration time.Duration) string {
