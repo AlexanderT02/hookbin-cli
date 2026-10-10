@@ -24,11 +24,19 @@ download() {
   fi
 }
 
-case "$(uname -s)" in
+system="$(uname -s)"
+binary="hookbin"
+archive_extension="tar.gz"
+case "$system" in
   Linux) os="linux" ;;
   Darwin) os="darwin" ;;
+  MINGW* | MSYS* | CYGWIN*)
+    os="windows"
+    binary="hookbin.exe"
+    archive_extension="zip"
+    ;;
   *)
-    echo "Unsupported operating system: $(uname -s). Use the Windows release archive from GitHub." >&2
+    echo "Unsupported operating system: ${system}." >&2
     exit 1
     ;;
 esac
@@ -50,7 +58,7 @@ if [ -z "$tag" ]; then
 fi
 
 version="${tag#v}"
-archive="hookbin_${version}_${os}_${arch}.tar.gz"
+archive="hookbin_${version}_${os}_${arch}.${archive_extension}"
 release_url="https://github.com/${repo}/releases/download/${tag}"
 download "${release_url}/${archive}" "$tmp_dir/$archive"
 download "${release_url}/SHA256SUMS" "$tmp_dir/SHA256SUMS"
@@ -75,12 +83,27 @@ if [ "$actual" != "$expected" ]; then
   exit 1
 fi
 
-tar -xzf "$tmp_dir/$archive" -C "$tmp_dir"
-mkdir -p "$install_dir"
-cp "$tmp_dir/hookbin" "$install_dir/hookbin"
-chmod 755 "$install_dir/hookbin"
+if [ "$archive_extension" = "zip" ]; then
+  if ! command -v unzip >/dev/null 2>&1; then
+    echo "Git Bash needs unzip to install the Windows release archive." >&2
+    exit 1
+  fi
+  unzip -q "$tmp_dir/$archive" -d "$tmp_dir/extracted"
+  extracted_dir="$tmp_dir/extracted"
+else
+  tar -xzf "$tmp_dir/$archive" -C "$tmp_dir"
+  extracted_dir="$tmp_dir"
+fi
 
-echo "Installed hookbin ${tag} to ${install_dir}/hookbin"
+mkdir -p "$install_dir"
+cp "$extracted_dir/$binary" "$install_dir/$binary"
+chmod 755 "$install_dir/$binary"
+
+echo "Installed hookbin ${tag} to ${install_dir}/${binary}"
+if [ "$os" = "windows" ]; then
+  echo "The Inspector's Windows command runs this binary from PowerShell."
+  exit 0
+fi
 case ":${PATH}:" in
   *":${install_dir}:"*) ;;
   *) echo "Add ${install_dir} to your PATH to run 'hookbin' from any directory." ;;
