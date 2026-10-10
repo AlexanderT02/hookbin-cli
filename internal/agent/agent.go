@@ -57,7 +57,7 @@ func Listen(ctx context.Context, server, slug, secret, target string, timeout ti
 		if time.Since(started) > 30*time.Second {
 			backoff = time.Second
 		}
-		fmt.Printf("Disconnected: %v; reconnecting in %s\n", err, backoff)
+		fmt.Printf("%s %v; reconnecting in %s\n", paint("Disconnected", ansiYellow), err, paint(backoff.String(), ansiBold))
 		timer := time.NewTimer(backoff)
 		select {
 		case <-ctx.Done():
@@ -106,7 +106,8 @@ func runSession(ctx context.Context, endpoint, slug, secret string, f *forward.F
 	}
 	sessionCtx, cancel := context.WithCancel(ctx)
 	if hello.Permanent {
-		fmt.Printf("Connected to bin %s -> forwarding to %s (never expires)\n", hello.BinSlug, f.Target())
+		fmt.Printf("%s %s  %s\n", paint("✓", ansiGreen), paint("Connected", ansiBold), paint(hello.BinSlug, ansiMuted))
+		fmt.Printf("  forwarding to %s  %s\n", paint(displayTarget(f.Target()), ansiWhite), paint("· never expires", ansiMuted))
 	} else {
 		expiresAt, err := time.Parse(time.RFC3339, hello.ExpiresAt)
 		if err != nil {
@@ -120,8 +121,8 @@ func runSession(ctx context.Context, endpoint, slug, secret string, f *forward.F
 		cancel()
 		sessionCtx, cancel = context.WithDeadline(ctx, expiresAt)
 		go warnBeforeExpiry(sessionCtx, expiresAt, warned)
-		fmt.Printf("Connected to bin %s -> forwarding to %s (expires in %s)\n",
-			hello.BinSlug, f.Target(), time.Until(expiresAt).Round(time.Minute))
+		fmt.Printf("%s %s  %s\n", paint("✓", ansiGreen), paint("Connected", ansiBold), paint(hello.BinSlug, ansiMuted))
+		fmt.Printf("  forwarding to %s  %s\n", paint(displayTarget(f.Target()), ansiWhite), paint("· expires in "+durationLabel(time.Until(expiresAt)), ansiMuted))
 	}
 	var workers sync.WaitGroup
 	defer func() { cancel(); workers.Wait() }()
@@ -178,10 +179,10 @@ func runSession(ctx context.Context, endpoint, slug, secret string, f *forward.F
 				continue
 			}
 			if err := f.SetTarget(target.TargetURL); err != nil {
-				fmt.Printf("Ignored new target %q: %v\n", target.TargetURL, err)
+				fmt.Printf("%s %q: %v\n", paint("Ignored new target", ansiYellow), target.TargetURL, err)
 				continue
 			}
-			fmt.Printf("Now forwarding to %s\n", f.Target())
+			fmt.Printf("%s Target switched\n  forwarding to %s\n", paint("✓", ansiGreen), paint(displayTarget(f.Target()), ansiWhite))
 			if err := ready(); err != nil {
 				return err
 			}
@@ -211,16 +212,24 @@ func runSession(ctx context.Context, endpoint, slug, secret string, f *forward.F
 func handleRequest(ctx context.Context, f *forward.Forwarder, request protocol.Request, write func(any) error) error {
 	result, err := f.Send(ctx, request)
 	label := request.Path
-	if request.Replay {
-		label += " (replay)"
-	}
 	if err != nil {
-		fmt.Printf("%s  %s %s  ->  %v\n", time.Now().Format("15:04:05"), request.Method, label, err)
+		replayColumn := column("", 8)
+		if request.Replay {
+			replayColumn = replayBadge()
+		}
+		fmt.Printf("%s  %s  %s%s  %s  %s\n", paint(time.Now().Format("15:04:05"), ansiMuted),
+			paint(column(request.Method, 6), ansiWhite), paint(column(label, 36), ansiWhite), replayColumn,
+			errorBadge(), paint(column(fmt.Sprintf("%d ms", result.Duration.Milliseconds()), 8), ansiMuted))
 		return write(protocol.Error{Type: "error", AttemptID: request.AttemptID,
 			RequestID: request.RequestID, Message: err.Error(), DurationMs: result.Duration.Milliseconds()})
 	}
-	fmt.Printf("%s  %s %s  ->  %d  %d ms\n", time.Now().Format("15:04:05"),
-		request.Method, label, result.Status, result.Duration.Milliseconds())
+	replayColumn := column("", 8)
+	if request.Replay {
+		replayColumn = replayBadge()
+	}
+	fmt.Printf("%s  %s  %s%s  %s  %s\n", paint(time.Now().Format("15:04:05"), ansiMuted),
+		paint(column(request.Method, 6), ansiWhite), paint(column(label, 36), ansiWhite), replayColumn,
+		statusBadge(result.Status), paint(column(fmt.Sprintf("%d ms", result.Duration.Milliseconds()), 8), ansiMuted))
 	return write(protocol.Response{Type: "response", AttemptID: request.AttemptID,
 		RequestID: request.RequestID, Status: result.Status, Headers: result.Headers,
 		BodyBase64: base64.StdEncoding.EncodeToString(result.Body), DurationMs: result.Duration.Milliseconds()})
@@ -235,7 +244,7 @@ func warnBeforeExpiry(ctx context.Context, expiry time.Time, once *sync.Once) {
 	defer timer.Stop()
 	select {
 	case <-timer.C:
-		once.Do(func() { fmt.Println("Warning: bin expires in less than 10 minutes") })
+		once.Do(func() { fmt.Printf("%s Bin expires in less than 10 minutes\n", paint("Warning:", ansiYellow)) })
 	case <-ctx.Done():
 	}
 }
