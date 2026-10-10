@@ -6,6 +6,7 @@ type Hello struct {
 	ServerVersion   string `json:"serverVersion"`
 	ProtocolVersion int    `json:"protocolVersion"`
 	ExpiresAt       string `json:"expiresAt"`
+	Permanent       bool   `json:"permanent"`
 }
 
 type Request struct {

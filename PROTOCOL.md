@@ -8,7 +8,10 @@ unsupported protocol with 426. All WebSocket messages are JSON text frames.
 ## Server to CLI
 
 The first message is `hello` with `binSlug`, `serverVersion`,
-`protocolVersion`, and `expiresAt` (UTC ISO 8601). The server then sends:
+`protocolVersion`, `expiresAt` (UTC ISO 8601), and `permanent`. A bin that belongs to
+an account never expires: the server then sets `permanent` to `true` and reports
+`expiresAt` as `9999-12-31T23:59:59Z`, so CLIs that predate `permanent` keep working.
+The server then sends:
 
 - `request`: `attemptId`, `requestId`, `replay`, `method`, `path` (starting with
   `/`), `query` (without `?`), `headers` (names to arrays of values), and

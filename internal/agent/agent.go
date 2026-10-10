@@ -104,19 +104,27 @@ func runSession(ctx context.Context, endpoint, slug, secret, target string, f *f
 	if err := json.Unmarshal(data, &hello); err != nil || hello.Type != "hello" || hello.ProtocolVersion != 1 {
 		return permanentError("invalid or unsupported server hello")
 	}
-	expiresAt, err := time.Parse(time.RFC3339, hello.ExpiresAt)
-	if err != nil {
-		return permanentError("invalid bin expiry from server")
+	sessionCtx, cancel := context.WithCancel(ctx)
+	if hello.Permanent {
+		fmt.Printf("Connected to bin %s -> forwarding to %s (never expires)\n", hello.BinSlug, target)
+	} else {
+		expiresAt, err := time.Parse(time.RFC3339, hello.ExpiresAt)
+		if err != nil {
+			cancel()
+			return permanentError("invalid bin expiry from server")
+		}
+		if !expiresAt.After(time.Now()) {
+			cancel()
+			return permanentError("bin expired; create a new one at https://hookbin.madebyflow.de")
+		}
+		cancel()
+		sessionCtx, cancel = context.WithDeadline(ctx, expiresAt)
+		go warnBeforeExpiry(sessionCtx, expiresAt, warned)
+		fmt.Printf("Connected to bin %s -> forwarding to %s (expires in %s)\n",
+			hello.BinSlug, target, time.Until(expiresAt).Round(time.Minute))
 	}
-	if !expiresAt.After(time.Now()) {
-		return permanentError("bin expired; create a new one at https://hookbin.madebyflow.de")
-	}
-	sessionCtx, cancel := context.WithDeadline(ctx, expiresAt)
 	var workers sync.WaitGroup
 	defer func() { cancel(); workers.Wait() }()
-	go warnBeforeExpiry(sessionCtx, expiresAt, warned)
-	fmt.Printf("Connected to bin %s -> forwarding to %s (expires in %s)\n",
-		hello.BinSlug, target, time.Until(expiresAt).Round(time.Minute))
 	var writeMu sync.Mutex
 	write := func(message any) error {
 		payload, err := json.Marshal(message)

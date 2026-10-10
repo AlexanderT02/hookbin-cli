@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-repo="AlexanderT02/hookbin"
+repo="AlexanderT02/hookbin-cli"
 install_dir="${HOOKBIN_INSTALL_DIR:-${HOME}/.local/bin}"
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/hookbin-install.XXXXXX")"
 
