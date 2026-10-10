@@ -27,12 +27,10 @@ var (
 )
 
 type terminalUI struct {
-	mu           sync.Mutex
-	color        bool
-	waiting      chan struct{}
-	frame        int
-	waitingSince time.Time
-	requests     int
+	mu      sync.Mutex
+	color   bool
+	waiting chan struct{}
+	frame   int
 }
 
 var screen = newTerminalUI()
@@ -73,14 +71,11 @@ func (ui *terminalUI) badge(text string, class int) string {
 }
 
 func (ui *terminalUI) spinnerLine() string {
-	track := []rune("────────")
-	track[ui.frame%len(track)] = '●'
-	idle := time.Since(ui.waitingSince).Truncate(time.Second)
-	label := "  listening for webhooks"
-	if ui.requests > 0 {
-		label = fmt.Sprintf("  listening for webhooks  ·  %d received", ui.requests)
+	dot := green
+	if ui.frame%2 != 0 {
+		dot = muted
 	}
-	return "  " + ui.render(green, string(track)) + ui.render(white, label) + ui.render(muted, "  ·  idle "+idle.String()+"  ·  Ctrl+C to stop")
+	return "  " + ui.render(dot, "●") + "  " + ui.render(muted, "Waiting for webhooks  ·  Ctrl+C to stop")
 }
 
 func (ui *terminalUI) clearWaiting() {
@@ -102,19 +97,17 @@ func (ui *terminalUI) printBlock(block string) {
 func (ui *terminalUI) startWaiting() {
 	ui.mu.Lock()
 	if !ui.color {
-		fmt.Println("  listening for webhooks  ·  Ctrl+C to stop")
+		fmt.Println("  Waiting for webhooks  ·  Ctrl+C to stop")
 		ui.mu.Unlock()
 		return
 	}
 	stop := make(chan struct{})
 	ui.waiting = stop
 	ui.frame = 0
-	ui.waitingSince = time.Now()
-	ui.requests = 0
 	fmt.Print(ui.spinnerLine())
 	ui.mu.Unlock()
 	go func() {
-		ticker := time.NewTicker(120 * time.Millisecond)
+		ticker := time.NewTicker(650 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {
@@ -146,22 +139,29 @@ func (ui *terminalUI) stopWaiting() {
 	}
 }
 
+func (ui *terminalUI) started(version string) {
+	if version != "dev" {
+		version = "v" + version
+	}
+	ui.printBlock("  " + ui.render(white.Bold(true), "hookbin") + "  " + ui.render(muted, version) + "\n")
+}
+
+func NotifyStarted() {
+	screen.started(Version)
+}
+
 func (ui *terminalUI) connected(slug, target, expiry string) {
-	ui.printBlock(ui.render(green, "✓") + " " + ui.render(white.Bold(true), "Connected") + "  " + ui.render(muted, slug) + "\n" +
-		"  forwarding to " + ui.render(white, displayTarget(target)) + "  " + ui.render(muted, "· "+expiry) + "\n")
+	ui.printBlock("  " + ui.render(green, "●") + "  " + ui.render(white.Bold(true), "Connected") + "  " + ui.render(muted, slug) + "\n" +
+		"     forwarding to " + ui.render(white, displayTarget(target)) + "  " + ui.render(muted, "· "+expiry) + "\n")
 	ui.startWaiting()
 }
 
 func (ui *terminalUI) targetChanged(target string) {
-	ui.printBlock(ui.render(green, "✓") + " " + ui.render(white.Bold(true), "Target switched") + "\n" +
-		"  forwarding to " + ui.render(white, displayTarget(target)))
+	ui.printBlock("  " + ui.render(green, "●") + "  " + ui.render(white.Bold(true), "Target switched") + "\n" +
+		"     forwarding to " + ui.render(white, displayTarget(target)))
 }
 
 func (ui *terminalUI) request(method, path string, replay bool, status int, elapsed time.Duration, requestError error) {
-	ui.mu.Lock()
-	ui.requests++
-	ui.waitingSince = time.Now()
-	ui.mu.Unlock()
 	replayCell := strings.Repeat(" ", 8)
 	if replay {
 		replayCell = ui.render(replayStyle, "replay")

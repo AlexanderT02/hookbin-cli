@@ -62,6 +62,7 @@ func NewCommand() *cobra.Command {
 			}
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+			agent.NotifyStarted()
 			if agent.Version != "dev" {
 				go func() {
 					checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
