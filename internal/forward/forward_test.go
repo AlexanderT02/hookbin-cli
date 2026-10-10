@@ -69,6 +69,28 @@ func TestRootPathUsesTargetPath(t *testing.T) {
 	}
 }
 
+func TestSetTargetSwitchesUrlAndRejectsInvalid(t *testing.T) {
+	f, err := New("http://localhost:3000", time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.SetTarget("http://localhost:8080/hooks"); err != nil {
+		t.Fatal(err)
+	}
+	u, err := f.URL("/stripe", "a=1")
+	if err != nil || u.String() != "http://localhost:8080/hooks/stripe?a=1" {
+		t.Fatalf("url = %v, %v", u, err)
+	}
+	for _, invalid := range []string{"localhost:3000", "file:///etc/passwd", "http://user:pass@localhost"} {
+		if f.SetTarget(invalid) == nil {
+			t.Fatalf("accepted %q", invalid)
+		}
+	}
+	if f.Target() != "http://localhost:8080/hooks" {
+		t.Fatalf("target = %s", f.Target())
+	}
+}
+
 func TestResponseBodyIsTruncated(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(bytes.Repeat([]byte("x"), MaxResponseBytes+100))

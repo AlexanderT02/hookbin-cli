@@ -39,8 +39,20 @@ type Error struct {
 	DurationMs int64  `json:"durationMs"`
 }
 
+// Ready is sent after hello and again after every target switch. Features lists optional abilities
+// such as "retarget"; servers that do not know a feature ignore it.
 type Ready struct {
-	Type       string `json:"type"`
-	CliVersion string `json:"cliVersion"`
-	TargetURL  string `json:"targetUrl"`
+	Type       string   `json:"type"`
+	CliVersion string   `json:"cliVersion"`
+	TargetURL  string   `json:"targetUrl"`
+	Features   []string `json:"features,omitempty"`
 }
+
+// Target asks the CLI to forward to another local URL from now on.
+type Target struct {
+	Type      string `json:"type"`
+	TargetURL string `json:"targetUrl"`
+}
+
+// Features this CLI announces in ready.
+var Features = []string{"retarget"}

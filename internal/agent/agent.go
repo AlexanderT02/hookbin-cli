@@ -43,7 +43,7 @@ func Listen(ctx context.Context, server, slug, secret, target string, timeout ti
 	var warned sync.Once
 	for {
 		started := time.Now()
-		err := runSession(ctx, u.String(), slug, secret, target, f, &warned)
+		err := runSession(ctx, u.String(), slug, secret, f, &warned)
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -72,7 +72,7 @@ func Listen(ctx context.Context, server, slug, secret, target string, timeout ti
 	}
 }
 
-func runSession(ctx context.Context, endpoint, slug, secret, target string, f *forward.Forwarder, warned *sync.Once) error {
+func runSession(ctx context.Context, endpoint, slug, secret string, f *forward.Forwarder, warned *sync.Once) error {
 	conn, response, err := websocket.Dial(ctx, endpoint, &websocket.DialOptions{
 		HTTPHeader: http.Header{"Authorization": {"Bearer " + secret}, "Hookbin-Protocol": {"1"}},
 	})
@@ -106,7 +106,7 @@ func runSession(ctx context.Context, endpoint, slug, secret, target string, f *f
 	}
 	sessionCtx, cancel := context.WithCancel(ctx)
 	if hello.Permanent {
-		fmt.Printf("Connected to bin %s -> forwarding to %s (never expires)\n", hello.BinSlug, target)
+		fmt.Printf("Connected to bin %s -> forwarding to %s (never expires)\n", hello.BinSlug, f.Target())
 	} else {
 		expiresAt, err := time.Parse(time.RFC3339, hello.ExpiresAt)
 		if err != nil {
@@ -121,7 +121,7 @@ func runSession(ctx context.Context, endpoint, slug, secret, target string, f *f
 		sessionCtx, cancel = context.WithDeadline(ctx, expiresAt)
 		go warnBeforeExpiry(sessionCtx, expiresAt, warned)
 		fmt.Printf("Connected to bin %s -> forwarding to %s (expires in %s)\n",
-			hello.BinSlug, target, time.Until(expiresAt).Round(time.Minute))
+			hello.BinSlug, f.Target(), time.Until(expiresAt).Round(time.Minute))
 	}
 	var workers sync.WaitGroup
 	defer func() { cancel(); workers.Wait() }()
@@ -137,7 +137,10 @@ func runSession(ctx context.Context, endpoint, slug, secret, target string, f *f
 		defer writeMu.Unlock()
 		return conn.Write(writeCtx, websocket.MessageText, payload)
 	}
-	if err := write(protocol.Ready{Type: "ready", CliVersion: Version, TargetURL: target}); err != nil {
+	ready := func() error {
+		return write(protocol.Ready{Type: "ready", CliVersion: Version, TargetURL: f.Target(), Features: protocol.Features})
+	}
+	if err := ready(); err != nil {
 		return fmt.Errorf("send ready: %w", err)
 	}
 	slots := make(chan struct{}, 8)
@@ -168,6 +171,20 @@ func runSession(ctx context.Context, endpoint, slug, secret, target string, f *f
 			}
 		case "expired":
 			return permanentError("bin expired; create a new one at https://hookbin.madebyflow.de")
+		case "target":
+			// Sent when the target is changed in the inspector. The new ready confirms it to the server.
+			var target protocol.Target
+			if json.Unmarshal(data, &target) != nil {
+				continue
+			}
+			if err := f.SetTarget(target.TargetURL); err != nil {
+				fmt.Printf("Ignored new target %q: %v\n", target.TargetURL, err)
+				continue
+			}
+			fmt.Printf("Now forwarding to %s\n", f.Target())
+			if err := ready(); err != nil {
+				return err
+			}
 		case "request":
 			var request protocol.Request
 			if json.Unmarshal(data, &request) != nil || request.AttemptID == "" || request.RequestID == "" {

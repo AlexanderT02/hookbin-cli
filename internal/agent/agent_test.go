@@ -16,11 +16,24 @@ import (
 )
 
 type sessionFixture struct {
-	server *httptest.Server
-	target string
-	result chan []byte
-	ping   bool
-	expire bool
+	server     *httptest.Server
+	target     string
+	result     chan []byte
+	readies    chan []byte
+	ping       bool
+	expire     bool
+	retargetTo string
+}
+
+// withRetarget makes the server switch the CLI to a second local server before sending the request.
+func (fixture *sessionFixture) withRetarget(t *testing.T) *sessionFixture {
+	t.Helper()
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(second.Close)
+	fixture.retargetTo = second.URL + "/hooks"
+	return fixture
 }
 
 func (fixture *sessionFixture) withPing() *sessionFixture {
@@ -35,7 +48,7 @@ func (fixture *sessionFixture) withExpiry() *sessionFixture {
 
 func newSessionFixture(t *testing.T, targetError bool) *sessionFixture {
 	t.Helper()
-	fixture := &sessionFixture{result: make(chan []byte, 1)}
+	fixture := &sessionFixture{result: make(chan []byte, 1), readies: make(chan []byte, 2)}
 	fixture.target = "http://127.0.0.1:1/webhook"
 	if !targetError {
 		local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -61,10 +74,25 @@ func newSessionFixture(t *testing.T, targetError bool) *sessionFixture {
 			fixture.result <- nil
 			return
 		}
-		if _, _, err := conn.Read(ctx); err != nil {
+		_, ready, err := conn.Read(ctx)
+		if err != nil {
 			fixture.result <- nil
 			return
-		} // ready
+		}
+		fixture.readies <- ready
+		if fixture.retargetTo != "" {
+			target, _ := json.Marshal(protocol.Target{Type: "target", TargetURL: fixture.retargetTo})
+			if conn.Write(ctx, websocket.MessageText, target) != nil {
+				fixture.result <- nil
+				return
+			}
+			_, confirmed, err := conn.Read(ctx)
+			if err != nil {
+				fixture.result <- nil
+				return
+			}
+			fixture.readies <- confirmed
+		}
 		if fixture.expire {
 			_ = conn.Write(ctx, websocket.MessageText, []byte(`{"type":"expired"}`))
 			return
@@ -107,7 +135,7 @@ func (fixture *sessionFixture) run(t *testing.T) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return runSession(ctx, strings.Replace(fixture.server.URL, "http", "ws", 1),
-		"abcdefghijklmnop", "secret", fixture.target, f, &sync.Once{})
+		"abcdefghijklmnop", "secret", f, &sync.Once{})
 }
 
 func (fixture *sessionFixture) message(t *testing.T) map[string]any {
@@ -144,6 +172,28 @@ func TestRepliesToServerPing(t *testing.T) {
 	fixture := newSessionFixture(t, false).withPing()
 	fixture.run(t)
 	if message := fixture.message(t); message["type"] != "response" {
+		t.Fatalf("result = %#v", message)
+	}
+}
+
+func TestReadyAnnouncesRetarget(t *testing.T) {
+	fixture := newSessionFixture(t, false)
+	fixture.run(t)
+	var ready protocol.Ready
+	if err := json.Unmarshal(<-fixture.readies, &ready); err != nil || len(ready.Features) != 1 || ready.Features[0] != "retarget" {
+		t.Fatalf("ready = %#v, %v", ready, err)
+	}
+}
+
+func TestTargetMessageSwitchesForwarding(t *testing.T) {
+	fixture := newSessionFixture(t, false).withRetarget(t)
+	fixture.run(t)
+	<-fixture.readies
+	var confirmed protocol.Ready
+	if err := json.Unmarshal(<-fixture.readies, &confirmed); err != nil || confirmed.TargetURL != fixture.retargetTo {
+		t.Fatalf("confirmed = %#v, %v", confirmed, err)
+	}
+	if message := fixture.message(t); message["type"] != "response" || message["status"] != float64(202) {
 		t.Fatalf("result = %#v", message)
 	}
 }

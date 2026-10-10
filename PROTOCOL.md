@@ -18,6 +18,10 @@ The server then sends:
   `bodyBase64` (empty string for no body).
 - `ping`: expects a `pong` within 10 seconds. Sent every 30 seconds.
 - `expired`: the bin has expired; the CLI exits without reconnecting.
+- `target`: `targetUrl`, an absolute http(s) URL. The CLI forwards every later
+  request there, prints the new target, and confirms with a new `ready`. It is
+  sent only to CLIs that announced the `retarget` feature, when someone changes
+  the target in the inspector. An invalid URL is ignored and the old target stays.
 
 Every delivery, including a replay of the same captured request, receives a
 new `attemptId`. This lets the server match each result to the right delivery
@@ -25,7 +29,9 @@ when several CLIs are connected or requests are replayed concurrently.
 
 ## CLI to server
 
-After `hello`, the CLI sends `ready` with `cliVersion` and `targetUrl`.
+After `hello`, the CLI sends `ready` with `cliVersion`, `targetUrl`, and the
+optional `features` list (currently `["retarget"]`). It sends `ready` again after
+each `target` switch. A CLI keeps a switched target when it reconnects.
 For each `request`, it sends exactly one of:
 
 - `response`: `attemptId`, `requestId`, `status`, `headers`, `bodyBase64`,

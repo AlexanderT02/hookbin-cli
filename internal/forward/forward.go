@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hookbin/hookbin-cli/internal/protocol"
@@ -24,7 +25,8 @@ var hopByHop = map[string]bool{
 }
 
 type Forwarder struct {
-	target *url.URL
+	mu     sync.RWMutex
+	target *url.URL // switched by SetTarget while requests are in flight
 	client *http.Client
 }
 
@@ -41,13 +43,21 @@ func New(target string, timeout time.Duration) (*Forwarder, error) {
 	return NewWithOptions(target, timeout, false)
 }
 
-func NewWithOptions(target string, timeout time.Duration, insecure bool) (*Forwarder, error) {
+func parseTarget(target string) (*url.URL, error) {
 	u, err := url.Parse(target)
 	if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, errors.New("--forward-to must be an absolute http(s) URL")
 	}
 	if u.User != nil || u.Fragment != "" {
 		return nil, errors.New("--forward-to cannot contain credentials or a fragment")
+	}
+	return u, nil
+}
+
+func NewWithOptions(target string, timeout time.Duration, insecure bool) (*Forwarder, error) {
+	u, err := parseTarget(target)
+	if err != nil {
+		return nil, err
 	}
 	if timeout <= 0 {
 		return nil, errors.New("--timeout must be positive")
@@ -63,6 +73,25 @@ func NewWithOptions(target string, timeout time.Duration, insecure bool) (*Forwa
 	return &Forwarder{target: u, client: client}, nil
 }
 
+// Target is the local URL requests are forwarded to.
+func (f *Forwarder) Target() string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.target.String()
+}
+
+// SetTarget switches the local URL for every request from now on. Requests already being sent keep the old one.
+func (f *Forwarder) SetTarget(target string) error {
+	u, err := parseTarget(target)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	f.target = u
+	f.mu.Unlock()
+	return nil
+}
+
 func (f *Forwarder) URL(path, query string) (*url.URL, error) {
 	if !strings.HasPrefix(path, "/") {
 		return nil, errors.New("invalid request path")
@@ -70,7 +99,9 @@ func (f *Forwarder) URL(path, query string) (*url.URL, error) {
 	if _, err := url.ParseRequestURI(path); err != nil {
 		return nil, fmt.Errorf("invalid request path: %w", err)
 	}
+	f.mu.RLock()
 	u := *f.target
+	f.mu.RUnlock()
 	basePath := strings.TrimSuffix(u.EscapedPath(), "/")
 	rawPath := basePath + path
 	if path == "/" && basePath != "" {
