@@ -173,7 +173,7 @@ chmod 755 "$install_dir/$binary"
 done_step "Installed hookbin ${tag}"
 printf '\n  %s\n\n' "${install_dir}/${binary}"
 if [ "$os" = "windows" ]; then
-  printf '  The Inspector Windows command runs this binary from PowerShell.\n'
+  printf '  Run it from Git Bash by path, as the inspector command does: ~/.local/bin/hookbin.exe listen ...\n'
   exit 0
 fi
 case ":${PATH}:" in

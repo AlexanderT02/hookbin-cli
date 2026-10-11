@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="340" viewBox="0 0 760 340" role="img" aria-label="hookbin listen forwards three webhooks to localhost: 200, 500, then a replay that returns 200">
+<style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;font-size:14px;white-space:pre}.a1{animation:k1 14.0s infinite}@keyframes k1{0%,1.43%{opacity:0}2.93%,95%{opacity:1}98%,100%{opacity:0}}.a2{animation:k2 14.0s infinite}@keyframes k2{0%,6.43%{opacity:0}7.93%,95%{opacity:1}98%,100%{opacity:0}}.a3{animation:k3 14.0s infinite}@keyframes k3{0%,10.71%{opacity:0}12.21%,95%{opacity:1}98%,100%{opacity:0}}.a4{animation:k4 14.0s infinite}@keyframes k4{0%,21.43%{opacity:0}22.93%,95%{opacity:1}98%,100%{opacity:0}}.a5{animation:k5 14.0s infinite}@keyframes k5{0%,35.71%{opacity:0}37.21%,95%{opacity:1}98%,100%{opacity:0}}.a6{animation:k6 14.0s infinite}@keyframes k6{0%,53.57%{opacity:0}55.07%,95%{opacity:1}98%,100%{opacity:0}}.a7{animation:k7 14.0s infinite}@keyframes k7{0%,14.29%{opacity:0}15.79%,95%{opacity:1}98%,100%{opacity:0}}.blink{animation:blink 1.3s steps(1) infinite}@keyframes blink{50%{fill:#929e96}}@media (prefers-reduced-motion:reduce){[class^=a]{animation:none}.blink{animation:none}}</style>
+<rect width="760" height="340" rx="12" fill="#181b19"/>
+<circle cx="24" cy="22" r="5.5" fill="#3a3f3c"/><circle cx="42" cy="22" r="5.5" fill="#3a3f3c"/><circle cx="60" cy="22" r="5.5" fill="#3a3f3c"/>
+<text x="380.0" y="26" fill="#6b746e" text-anchor="middle" style="font-size:12px">~/my-app</text>
+<line x1="0" y1="42" x2="760" y2="42" stroke="#2a2e2b"/>
+<text x="24.0" y="72" xml:space="preserve" class="a1"><tspan fill="#7fd1a0">$ </tspan><tspan fill="#f5f7f5">hookbin listen k3x9f2 -f http://localhost:3000</tspan></text>
+<text x="40.8" y="105.0" xml:space="preserve" class="a2"><tspan fill="#f5f7f5" font-weight="700">hookbin</tspan><tspan fill="#929e96">  v0.1.4</tspan></text>
+<text x="40.8" y="138" xml:space="preserve" class="a3"><tspan fill="#7fd1a0">●  </tspan><tspan fill="#f5f7f5" font-weight="700">Connected</tspan><tspan fill="#929e96">  k3x9f2</tspan></text>
+<text x="66.0" y="160" xml:space="preserve" class="a3"><tspan fill="#f5f7f5">forwarding to </tspan><tspan fill="#f5f7f5">localhost:3000</tspan><tspan fill="#929e96">  · expires in 7h 59m</tspan></text>
+<text x="24.0" y="199.6" fill="#929e96" class="a4">14:02:11</text>
+<text x="108.0" y="199.6" fill="#f5f7f5" class="a4">POST</text>
+<text x="175.2" y="199.6" fill="#f5f7f5" class="a4">/webhooks/stripe</text>
+<rect x="519.6" y="184.6" width="42.0" height="20" rx="3" fill="#27362d" class="a4"/>
+<text x="528.0" y="199.6" fill="#7fd1a0" font-weight="700" class="a4">200</text>
+<text x="578.4" y="199.6" fill="#929e96" class="a4">42 ms</text>
+<text x="24.0" y="226.0" fill="#929e96" class="a5">14:02:48</text>
+<text x="108.0" y="226.0" fill="#f5f7f5" class="a5">POST</text>
+<text x="175.2" y="226.0" fill="#f5f7f5" class="a5">/webhooks/github</text>
+<rect x="519.6" y="211.0" width="42.0" height="20" rx="3" fill="#392e2c" class="a5"/>
+<text x="528.0" y="226.0" fill="#f08a7e" font-weight="700" class="a5">500</text>
+<text x="578.4" y="226.0" fill="#929e96" class="a5">18 ms</text>
+<text x="24.0" y="252.39999999999998" fill="#929e96" class="a6">14:03:20</text>
+<text x="108.0" y="252.39999999999998" fill="#f5f7f5" class="a6">POST</text>
+<text x="175.2" y="252.39999999999998" fill="#f5f7f5" class="a6">/webhooks/github</text>
+<rect x="435.6" y="237.39999999999998" width="67.2" height="20" rx="3" fill="#303431" class="a6"/>
+<text x="444.0" y="252.39999999999998" fill="#b5b9b7" class="a6">replay</text>
+<rect x="519.6" y="237.39999999999998" width="42.0" height="20" rx="3" fill="#27362d" class="a6"/>
+<text x="528.0" y="252.39999999999998" fill="#7fd1a0" font-weight="700" class="a6">200</text>
+<text x="578.4" y="252.39999999999998" fill="#929e96" class="a6">21 ms</text>
+<text x="40.8" y="292" xml:space="preserve" class="a7"><tspan fill="#7fd1a0" class="blink">●</tspan><tspan fill="#929e96">  Waiting for webhooks  ·  Ctrl+C to stop</tspan></text>
+</svg>
